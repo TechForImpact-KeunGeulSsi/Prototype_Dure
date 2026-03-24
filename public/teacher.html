@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>활동 기록 — 선생님</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .layout { display: grid; grid-template-columns: 1fr 360px; gap: 24px; max-width: 1060px; margin: 0 auto; padding: 32px 24px; }
+    .records-panel { background: white; border-radius: var(--radius); border: 1px solid var(--border); padding: 20px; max-height: calc(100vh - 120px); overflow-y: auto; }
+    .records-panel h3 { font-size: 15px; font-weight: 700; margin-bottom: 16px; }
+    .record-item { padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); margin-bottom: 10px; }
+    .record-item-title { font-weight: 700; font-size: 13px; margin-bottom: 4px; }
+    .record-item-meta { font-size: 11px; color: var(--text-muted); margin-bottom: 6px; }
+    .record-item-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+    .record-item-tags .tag { font-size: 11px; padding: 2px 8px; }
+    @media (max-width: 768px) { .layout { grid-template-columns: 1fr; } }
+    .section-title { font-size: 13px; font-weight: 700; color: var(--teal-dark); margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+    .form-section { margin-bottom: 20px; }
+  </style>
+</head>
+<body>
+  <nav class="nav">
+    <a href="index.html" class="nav-brand"><div class="logo">🌱</div>두레</a>
+    <div class="nav-links">
+      <a href="index.html">홈</a>
+      <a href="child.html">아이</a>
+      <a href="teacher.html" class="active">선생님</a>
+      <a href="parent.html">부모님</a>
+      <a href="dashboard.html">대시보드</a>
+    </div>
+  </nav>
+
+  <div class="layout">
+    <!-- LEFT: FORM -->
+    <div>
+      <div class="page-header">
+        <h1>📋 오늘 활동 기록하기</h1>
+        <p>프로그램 종료 후 간단하게 기록해주세요</p>
+      </div>
+
+      <div class="card card-lg fade-in">
+        <!-- DATE & VILLAGE -->
+        <div class="form-section">
+          <div class="grid-2" style="gap:12px;">
+            <div>
+              <label class="label">📅 날짜</label>
+              <input type="date" class="input" id="dateInput" />
+            </div>
+            <div>
+              <label class="label">📍 마을</label>
+              <select class="select" id="villageSelect">
+                <option value="">마을 선택</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- ACTIVITY -->
+        <div class="form-section">
+          <div class="section-title">🎯 오늘의 활동</div>
+          <div class="select-grid" id="activityGrid"></div>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- PARTICIPANTS -->
+        <div class="form-section">
+          <div class="section-title">👦 참여 아이들</div>
+          <div id="childList"></div>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- COMPETENCY TAGS -->
+        <div class="form-section">
+          <div class="section-title">⭐ 오늘 보인 역량 태그</div>
+          <div class="tags-row" id="tagList"></div>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- NOTE -->
+        <div class="form-section">
+          <label class="label">📝 간단 메모 (선택)</label>
+          <textarea class="textarea" id="noteInput" placeholder="오늘 특별히 관찰된 점이나 기억할 만한 순간을 적어주세요..."></textarea>
+        </div>
+
+        <!-- SUBMIT -->
+        <button class="btn btn-primary" style="width:100%; font-size:15px; padding:14px;" id="submitBtn" onclick="submitRecord()">
+          ✅ 활동 기록 저장하기
+        </button>
+      </div>
+    </div>
+
+    <!-- RIGHT: RECENT RECORDS -->
+    <div class="records-panel">
+      <h3>📂 최근 활동 기록</h3>
+      <div id="recordsList">
+        <div class="loading"><div class="spinner"></div>불러오는 중...</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    let children = [];
+    let selectedActivity = null;
+    let selectedParticipants = new Set();
+    let selectedTags = new Set();
+
+    const activityIcons = { '목공수업':'🪵','생태교실':'🌿','마을탐험':'🗺️','음반제작':'🎵','두부만들기':'🫘','달리기훈련':'🏃','엄빠학교':'📚','플로깅':'🌍','어르신 말벗':'👴' };
+
+    async function init() {
+      // Set today's date
+      const today = new Date().toISOString().split('T')[0];
+      document.getElementById('dateInput').value = today;
+
+      // Load data
+      const [childrenData, activities, villages, tags] = await Promise.all([
+        fetch('/api/children').then(r => r.json()),
+        fetch('/api/activities').then(r => r.json()),
+        fetch('/api/villages').then(r => r.json()),
+        fetch('/api/competency-tags').then(r => r.json()),
+      ]);
+      children = childrenData;
+
+      // Villages
+      const vSel = document.getElementById('villageSelect');
+      villages.forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = v; opt.textContent = v;
+        vSel.appendChild(opt);
+      });
+
+      // Activities
+      const actGrid = document.getElementById('activityGrid');
+      activities.forEach(act => {
+        const el = document.createElement('div');
+        el.className = 'select-card';
+        el.innerHTML = `<span class="icon">${activityIcons[act] || '⭐'}</span>${act}`;
+        el.onclick = () => {
+          document.querySelectorAll('#activityGrid .select-card').forEach(c => c.classList.remove('active'));
+          el.classList.add('active');
+          selectedActivity = act;
+        };
+        actGrid.appendChild(el);
+      });
+
+      // Children
+      const childList = document.getElementById('childList');
+      children.forEach(child => {
+        const el = document.createElement('div');
+        el.className = 'check-item';
+        el.innerHTML = `
+          <span class="check-emoji">${child.emoji}</span>
+          <div style="flex:1"><div class="check-name">${child.name}</div><div class="check-info">${child.grade} · ${child.village}</div></div>
+          <div class="check-box"></div>`;
+        el.onclick = () => {
+          if (selectedParticipants.has(child.id)) {
+            selectedParticipants.delete(child.id);
+            el.classList.remove('checked');
+          } else {
+            selectedParticipants.add(child.id);
+            el.classList.add('checked');
+          }
+        };
+        childList.appendChild(el);
+      });
+
+      // Tags
+      const tagList = document.getElementById('tagList');
+      tags.forEach(tag => {
+        const el = document.createElement('div');
+        el.className = 'tag';
+        el.textContent = tag;
+        el.onclick = () => {
+          if (selectedTags.has(tag)) {
+            selectedTags.delete(tag);
+            el.classList.remove('active');
+          } else {
+            selectedTags.add(tag);
+            el.classList.add('active');
+          }
+        };
+        tagList.appendChild(el);
+      });
+
+      loadRecords();
+    }
+
+    async function loadRecords() {
+      const list = document.getElementById('recordsList');
+      const records = await fetch('/api/records').then(r => r.json());
+
+      if (records.length === 0) {
+        list.innerHTML = '<div class="empty-state" style="padding:24px 0;"><div class="empty-icon">📭</div><h3>기록 없음</h3></div>';
+        return;
+      }
+
+      list.innerHTML = records.slice(0, 15).map(r => {
+        const participants = r.participantIds.map(id => children.find(c => c.id === id)?.name || '').filter(Boolean).join(', ');
+        const tagsHtml = r.tags.map(t => `<span class="tag" style="font-size:11px; padding:2px 8px;">${t}</span>`).join('');
+        return `
+          <div class="record-item">
+            <div class="record-item-title">${activityIcons[r.activity] || '⭐'} ${r.activity}</div>
+            <div class="record-item-meta">${r.date} · ${r.village} · ${participants || '참여자 없음'}</div>
+            ${r.note ? `<div style="font-size:12px; color:var(--text-muted); margin:4px 0 6px;">${r.note}</div>` : ''}
+            <div class="record-item-tags">${tagsHtml}</div>
+          </div>`;
+      }).join('');
+    }
+
+    async function submitRecord() {
+      if (!selectedActivity) { showToast('활동을 선택해주세요', 'error'); return; }
+      if (selectedParticipants.size === 0) { showToast('참여 아이를 한 명 이상 선택해주세요', 'error'); return; }
+      if (!document.getElementById('villageSelect').value) { showToast('마을을 선택해주세요', 'error'); return; }
+
+      const btn = document.getElementById('submitBtn');
+      btn.disabled = true;
+      btn.textContent = '저장 중...';
+
+      try {
+        await fetch('/api/records', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            activity: selectedActivity,
+            village: document.getElementById('villageSelect').value,
+            participantIds: [...selectedParticipants],
+            tags: [...selectedTags],
+            note: document.getElementById('noteInput').value,
+            date: document.getElementById('dateInput').value,
+          })
+        });
+
+        showToast('✅ 활동 기록이 저장됐습니다', 'success');
+
+        // Reset form
+        selectedActivity = null;
+        selectedParticipants = new Set();
+        selectedTags = new Set();
+        document.querySelectorAll('.select-card').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.check-item').forEach(el => el.classList.remove('checked'));
+        document.querySelectorAll('.tag').forEach(el => el.classList.remove('active'));
+        document.getElementById('noteInput').value = '';
+        document.getElementById('villageSelect').value = '';
+
+        loadRecords();
+      } catch (e) {
+        showToast('저장 중 오류가 발생했습니다', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '✅ 활동 기록 저장하기';
+      }
+    }
+
+    function showToast(msg, type = '') {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.className = `toast ${type} show`;
+      setTimeout(() => t.className = 'toast', 3000);
+    }
+
+    init();
+  </script>
+</body>
+</html>

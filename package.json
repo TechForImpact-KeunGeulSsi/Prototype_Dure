@@ -1,0 +1,12 @@
+{
+  "name": "village-ai-record",
+  "version": "1.0.0",
+  "description": "마을학교 AI 성장기록 시스템 - 큰글씨",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
