@@ -35,7 +35,7 @@ node server.js
 node server.js
 ```
 
-브라우저에서 → http://localhost:3000
+브라우저에서 → http://localhost:8000
 
 ---
 
